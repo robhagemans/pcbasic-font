@@ -19,7 +19,7 @@ import monobit
 
 logging.basicConfig(level=logging.INFO)
 
-CPIDOS_URL = 'http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/dos/cpi/cpidos30.zip'
+CPIDOS_URL = 'https://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/dos/cpi/3.0/cpidos30.zip'
 UNIVGA_URL = 'http://www.inp.nsk.su/~bolkhov/files/fonts/univga/uni-vga.tgz'
 UNIFONT_URL = 'https://ftp.gnu.org/gnu/unifont/unifont-13.0.03/unifont-13.0.03.tar.gz'
 
