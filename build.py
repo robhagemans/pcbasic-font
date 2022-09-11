@@ -15,11 +15,11 @@ from collections import defaultdict
 from itertools import chain
 from urllib import request
 
-import monobit
+from tools import monobit
 
 logging.basicConfig(level=logging.INFO)
 
-CPIDOS_URL = 'http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/dos/cpi/cpidos30.zip'
+CPIDOS_URL = 'https://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/dos/cpi/3.0/cpidos30.zip'
 UNIVGA_URL = 'http://www.inp.nsk.su/~bolkhov/files/fonts/univga/uni-vga.tgz'
 UNIFONT_URL = 'https://ftp.gnu.org/gnu/unifont/unifont-13.0.03/unifont-13.0.03.tar.gz'
 
@@ -37,7 +37,7 @@ CPI_NAMES = ['ega.cpx'] + [f'ega{_i}.cpx' for _i in range(2, 19)]
 
 
 CODEPAGE_DIR = 'codepage/'
-TARGET_DIR = '../pcbasic/data/fonts/'
+TARGET_DIR = 'output/'
 
 HEADER = 'header.txt'
 CHOICES = 'choices'
@@ -402,7 +402,7 @@ def main():
         univga = univga.with_glyph(univga_orig.get_glyph(orig).set_annotations(char=repl))
 
     # drop labels to avoid retaing chars on merge
-    univga = monobit.Font(_g.set_annotations(labels=()) for _g in univga.glyphs)
+    univga = monobit.Font(_g.set_annotations(tags=()) for _g in univga.glyphs)
 
     logging.info('Add uni-vga box-drawing glyphs.')
     box_glyphs = univga.subset(chr(_code) for _code in UNIVGA_UNSHIFTED)
@@ -452,6 +452,10 @@ def main():
 
     # output
     logging.info('Writing output')
+    try:
+        os.mkdir(TARGET_DIR)
+    except OSError:
+        pass
     for size, font in final_font.items():
         monobit.save(font.drop_comments(), f'{TARGET_DIR}/default_{size:02d}.hex', format='hext')
 
