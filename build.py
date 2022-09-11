@@ -402,7 +402,7 @@ def main():
         univga = univga.with_glyph(univga_orig.get_glyph(orig).set_annotations(char=repl))
 
     # drop labels to avoid retaing chars on merge
-    univga = monobit.Font(_g.set_annotations(labels=()) for _g in univga.glyphs)
+    univga = monobit.Font(_g.set_annotations(tags=()) for _g in univga.glyphs)
 
     logging.info('Add uni-vga box-drawing glyphs.')
     box_glyphs = univga.subset(chr(_code) for _code in UNIVGA_UNSHIFTED)
