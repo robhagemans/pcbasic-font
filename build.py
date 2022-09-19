@@ -308,7 +308,8 @@ def main():
             # save intermediate file
             monobit.save(
                 font,
-                f'work/yaff/{cpi_name}_{codepage}_{font.pixel_size:02d}.yaff'
+                f'work/yaff/{cpi_name}_{codepage}_{font.pixel_size:02d}.yaff',
+                overwrite=True
             )
             freedos_fonts[font.pixel_size][(cpi_name, codepage)] = font.set(encoding='unicode')
 
@@ -447,7 +448,7 @@ def main():
     pua_keys = set(chr(_code) for _code in range(0xe000, 0xf900))
     #pua_font = {_size: _font.subset(pua_keys) for _size, _font in final_font.items()}
     #for size, font in pua_font.items():
-    #    monobit.save(font, f'work/pua_{size:02d}.hex', format='hext')
+    #    monobit.save(font, f'work/pua_{size:02d}.hex', format='hext', overwrite=True)
     final_font = {_size: _font.without(pua_keys) for _size, _font in final_font.items()}
 
     logging.info('Sorting glyphs')
@@ -455,9 +456,8 @@ def main():
         # first take the 437 subset
         # note this'll be the Freedos 437 as we overrode it
         keys437 = ['\0'] + list(monobit.charmaps['cp437'].mapping.values())
-        logging.info(keys437)
         font437 = final_font[size].subset(keys437)
-        monobit.save(font437, f'work/cp437_{size}.yaff')
+        monobit.save(font437, f'work/cp437_{size}.yaff', overwrite=True)
         sortedfont = monobit.font.Font(sorted(
             (_glyph for _glyph in final_font[size].glyphs),
             key=lambda _g: (_g.char or '')
@@ -471,7 +471,7 @@ def main():
     except OSError:
         pass
     for size, font in final_font.items():
-        monobit.save(font, f'{TARGET_DIR}/default_{size:02d}.hex', format='hext')
+        monobit.save(font, f'{TARGET_DIR}/default_{size:02d}.hex', format='hext', overwrite=True)
 
     for size, font in final_font.items():
         wrong_size = [f'{ord(g.char):04x}' for g in font.glyphs if g.height != size or g.width not in (8, 16)]
