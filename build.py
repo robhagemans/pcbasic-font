@@ -56,6 +56,7 @@ FREEDOS_DROP = (
 )
 
 FREEDOS_COPY = {
+    '\u0000': '\u0020',
     # U+2107 EULER CONSTANT <-- U+0190 LATIN CAPITAL LETTER OPEN E
     '\u2107': '\u0190',
     # U+01A9 LATIN CAPITAL LETTER ESH <-- U+03A3 GREEK CAPITAL LETTER SIGMA
@@ -229,14 +230,14 @@ def precompose(font, max_glyphs):
             equiv = normalize('NFC', char)
             if equiv in codepoints:
                 logging.info(f'Assigning {fullname(char)} == {fullname(equiv)}.')
-                font = font.with_glyph(font.get_glyph(equiv).set_annotations(char=char))
+                font = font.add(glyphs=(font.get_glyph(equiv).modify(char=char),))
             else:
                 decomp = normalize('NFD', char)
                 if len(decomp) <= max_glyphs and all(c in codepoints for c in decomp):
                     logging.info(f'Composing {fullname(char)} as {fullname(decomp)}.')
                     glyphs = (font.get_glyph(c) for c in decomp)
-                    composed = monobit.Glyph.superimpose(glyphs).set_annotations(char=char)
-                    font = font.with_glyph(composed)
+                    composed = monobit.Glyph.superimpose(glyphs).modify(char=char)
+                    font = font.add(glyphs=(composed,))
     return font
 
 
@@ -246,7 +247,7 @@ def main():
     for filename in os.listdir(CODEPAGE_DIR):
         cp_name, ext = os.path.splitext(os.path.basename(filename))
         if ext == '.ucp':
-            monobit.Codepage.override(f'cp{cp_name}', f'{os.getcwd()}/{CODEPAGE_DIR}/{filename}')
+            monobit.charmaps.register(f'cp{cp_name}', f'{os.getcwd()}/{CODEPAGE_DIR}/{filename}')
 
     try:
         os.mkdir('work')
@@ -260,11 +261,11 @@ def main():
     # read header
     logging.info('Processing header')
     with open(HEADER, 'r') as header:
-        comments = tuple(_line[2:].rstrip() for _line in header)
+        comments = '\n'.join(_line[2:].rstrip() for _line in header)
 
     # create empty fonts with header
     final_font = {
-        size: monobit.font.Font(comments=comments).set_encoding('unicode')
+        size: monobit.font.Font(comments=comments).set(encoding='unicode')
         for size in SIZES
     }
 
@@ -306,10 +307,10 @@ def main():
             height = font.bounding_box[1]
             # save intermediate file
             monobit.save(
-                font.add_glyph_names(),
+                font,
                 f'work/yaff/{cpi_name}_{codepage}_{font.pixel_size:02d}.yaff'
             )
-            freedos_fonts[font.pixel_size][(cpi_name, codepage)] = font.set_encoding('unicode')
+            freedos_fonts[font.pixel_size][(cpi_name, codepage)] = font.set(encoding='unicode')
 
     # retrieve preferred picks from choices file
     logging.info('Processing choices')
@@ -330,7 +331,12 @@ def main():
     for size in SIZES:
         for yaff in COMPONENTS[size]:
             logging.info(f'Merging {yaff}.')
-            final_font[size] = final_font[size].merged_with(monobit.load(yaff))
+            local_yaff = monobit.load(yaff)[0]
+            # drop glyph-level comments
+            local_yaff = local_yaff.modify(glyphs=(
+                _g.drop('comments') for _g in local_yaff.glyphs
+            ))
+            final_font[size] = final_font[size].merged_with(local_yaff)
 
     # merge preferred picks from FreeDOS fonts
     logging.info('Add freedos preferred glyphs')
@@ -361,8 +367,9 @@ def main():
     for size in final_font.keys():
         for copy, orig in FREEDOS_COPY.items():
             try:
-                final_font[size] = final_font[size].with_glyph(
-                    final_font[size].get_glyph(orig).set_annotations(char=copy)
+                final_font[size] = final_font[size].add(glyphs=(
+                        final_font[size].get_glyph(orig).modify(char=copy, codepoint=()),
+                    )
                 )
             except KeyError as e:
                 logging.warning(e)
@@ -372,37 +379,42 @@ def main():
             except KeyError as e:
                 logging.warning(e)
             else:
-                offsets = orig.ink_offsets
+                offsets = orig.padding
                 mirrored = orig.crop(*offsets).mirror().expand(*offsets)
-                final_font[size] = final_font[size].with_glyph(mirrored.set_annotations(char=copy))
+                final_font[size] = final_font[size].add(glyphs=(mirrored.modify(char=copy, codepoint=()),))
         for copy, orig in FREEDOS_FLIP.items():
             try:
                 orig = final_font[size].get_glyph(orig)
             except KeyError as e:
                 logging.warning(e)
             else:
-                offsets = orig.ink_offsets
+                offsets = orig.padding
                 flipped = orig.crop(*offsets).flip().expand(*offsets)
-                final_font[size] = final_font[size].with_glyph(flipped.set_annotations(char=copy))
+                final_font[size] = final_font[size].add(glyphs=(flipped.modify(char=copy, codepoint=()),))
         for copy, orig in FREEDOS_TURN.items():
             try:
                 orig = final_font[size].get_glyph(orig)
             except KeyError as e:
                 logging.warning(e)
             else:
-                offsets = orig.ink_offsets
+                offsets = orig.padding
                 flipped = orig.crop(*offsets).flip().mirror().expand(*offsets)
-                final_font[size] = final_font[size].with_glyph(flipped.set_annotations(char=copy))
+                final_font[size] = final_font[size].add(glyphs=(flipped.modify(char=copy, codepoint=()),))
 
     # read univga
-    univga_orig = monobit.load(f'work/{UNIVGA_BDF}')
+    univga_orig = monobit.load(f'work/{UNIVGA_BDF}')[0]
     # replace code points where necessary
     univga = univga_orig.without(UNIVGA_REPLACE.keys())
     for orig, repl in UNIVGA_REPLACE.items():
-        univga = univga.with_glyph(univga_orig.get_glyph(orig).set_annotations(char=repl))
+        univga = univga.add(glyphs=(univga_orig.get_glyph(orig).modify(char=repl, codepoint=()),))
 
-    # drop labels to avoid retaing chars on merge
-    univga = monobit.Font(_g.set_annotations(tags=()) for _g in univga.glyphs)
+    logging.info('Exclude uni-vga nonprinting glyphs.')
+    nonprinting = [chr(_code) for _code in UNIVGA_NONPRINTING]
+    logging.info(nonprinting)
+    univga = univga.without(nonprinting)
+
+    # drop labels to avoid retaining chars on merge
+    univga = monobit.Font(_g.modify(tags=()) for _g in univga.glyphs)
 
     logging.info('Add uni-vga box-drawing glyphs.')
     box_glyphs = univga.subset(chr(_code) for _code in UNIVGA_UNSHIFTED)
@@ -410,22 +422,22 @@ def main():
 
     # shift uni-vga baseline down by one
     logging.info('Add remaining uni-vga glyphs after rebaselining.')
-    univga_rebaselined = univga.without(chr(_code) for _code in UNIVGA_NONPRINTING)
-    univga_rebaselined = univga_rebaselined.expand(top=1).crop(bottom=1)
+    univga_rebaselined = univga.expand(top=1).crop(bottom=1)
     final_font[16] = final_font[16].merged_with(univga_rebaselined)
 
 
     # copy glyphs from uni-vga
     for copy, orig in UNIVGA_COPY.items():
-        final_font[16] = final_font[16].with_glyph(
-            final_font[16].get_glyph(orig).set_annotations(char=copy)
+        final_font[16] = final_font[16].add(glyphs=(
+                final_font[16].get_glyph(orig).modify(char=copy),
+            )
         )
 
     # read unifont
     logging.info('Add glyphs from unifont.')
-    unifont = monobit.Font().set_encoding('unicode')
+    unifont = monobit.Font().set(encoding='unicode')
     for name in UNIFONT_NAMES:
-        unifont = unifont.merged_with(monobit.load(f'work/{UNIFONT_DIR}/{name}'))
+        unifont = unifont.merged_with(monobit.load(f'work/{UNIFONT_DIR}/{name}')[0])
     unifont_glyphs = unifont.subset(chr(_code) for _code in UNIFONT_RANGES)
     final_font[16] = final_font[16].merged_with(unifont_glyphs)
 
@@ -433,17 +445,19 @@ def main():
     # exclude personal use area code points
     logging.info('Removing private use area')
     pua_keys = set(chr(_code) for _code in range(0xe000, 0xf900))
-    pua_font = {_size: _font.subset(pua_keys) for _size, _font in final_font.items()}
-    for size, font in pua_font.items():
-        monobit.save(font, f'work/pua_{size:02d}.hex', format='hext')
+    #pua_font = {_size: _font.subset(pua_keys) for _size, _font in final_font.items()}
+    #for size, font in pua_font.items():
+    #    monobit.save(font, f'work/pua_{size:02d}.hex', format='hext')
     final_font = {_size: _font.without(pua_keys) for _size, _font in final_font.items()}
 
     logging.info('Sorting glyphs')
     for size in final_font.keys():
         # first take the 437 subset
         # note this'll be the Freedos 437 as we overrode it
-        keys437 = list(monobit.Codepage('cp437')._mapping.values())
+        keys437 = ['\0'] + list(monobit.charmaps['cp437'].mapping.values())
+        logging.info(keys437)
         font437 = final_font[size].subset(keys437)
+        monobit.save(font437, f'work/cp437_{size}.yaff')
         sortedfont = monobit.font.Font(sorted(
             (_glyph for _glyph in final_font[size].glyphs),
             key=lambda _g: (_g.char or '')
@@ -457,16 +471,7 @@ def main():
     except OSError:
         pass
     for size, font in final_font.items():
-        monobit.save(font.drop_comments(), f'{TARGET_DIR}/default_{size:02d}.hex', format='hext')
-
-    #composed = {
-    #    size: precompose(font, max_glyphs=4)
-    #            .without(font.get_chars()).drop_comments().add_glyph_names()
-    #    for size, font in final_font.items()
-    #}
-
-    #for size, font in composed.items():
-    #    monobit.save(font, f'autocomposed_{size:02d}.yaff')
+        monobit.save(font, f'{TARGET_DIR}/default_{size:02d}.hex', format='hext')
 
     for size, font in final_font.items():
         wrong_size = [f'{ord(g.char):04x}' for g in font.glyphs if g.height != size or g.width not in (8, 16)]
