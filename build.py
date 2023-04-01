@@ -426,7 +426,8 @@ def main():
 
     logging.info('Add uni-vga box-drawing glyphs.')
     box = univga.subset(chr(_code) for _code in UNIVGA_UNSHIFTED)
-    final_font[16] = final_font[16].exclude(chars=box.get_chars()).append(glyphs=box.glyphs)
+    box = box.exclude(chars=final_font[16].get_chars())
+    final_font[16] = final_font[16].append(glyphs=box.glyphs)
 
     # shift uni-vga baseline down by one
     logging.info('Add remaining uni-vga glyphs after rebaselining.')
