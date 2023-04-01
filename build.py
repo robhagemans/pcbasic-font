@@ -24,7 +24,7 @@ logging.basicConfig(level=logging.INFO)
 
 CPIDOS_URL = 'http://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/repositories/1.3/base/cpidos.zip'
 UNIVGA_URL = 'http://www.inp.nsk.su/~bolkhov/files/fonts/univga/uni-vga.tgz'
-UNIFONT_URL = 'https://ftp.gnu.org/gnu/unifont/unifont-13.0.03/unifont-13.0.03.tar.gz'
+UNIFONT_URL = 'https://ftp.gnu.org/gnu/unifont/unifont-15.0.01/unifont-15.0.01.tar.gz'
 
 CPIDOS_ZIP = CPIDOS_URL.split('/')[-1]
 UNIVGA_ZIP = UNIVGA_URL.split('/')[-1]
@@ -32,8 +32,8 @@ UNIFONT_ZIP = UNIFONT_URL.split('/')[-1]
 
 UNIVGA_BDF = 'uni_vga/u_vga16.bdf'
 
-UNIFONT_DIR = 'unifont-13.0.03/font/plane00/'
-UNIFONT_NAMES = ('spaces.hex', 'unifont-base.hex', 'hangul-syllables.hex', 'wqy.hex', 'thaana.hex')
+UNIFONT_DIR = UNIFONT_ZIP.split('.tar.gz')[0] + '/font/plane00/'
+UNIFONT_NAMES = ('spaces.hex', 'unifont-base.hex', 'hangul-syllables.hex', 'wqy.hex')
 
 CPI_DIR = 'CPI/'
 CPI_NAMES = ['EGA.CPX'] + [f'EGA{_i}.CPX' for _i in range(2, 19)]
