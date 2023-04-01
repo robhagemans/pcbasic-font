@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 
-# build HEX font file from FreeDOS CPIDOS font
+"""
+PC-BASIC default font builder
+build .hex font from glyphs in CPIDOS, Uni-VGA and UniFont
+"""
 
 
 import os
@@ -246,7 +249,7 @@ def main():
     for filename in os.listdir(CODEPAGE_DIR):
         cp_name, ext = os.path.splitext(os.path.basename(filename))
         if ext == '.ucp':
-            monobit.Codepage.override(f'cp{cp_name}', f'{os.getcwd()}/{CODEPAGE_DIR}/{filename}')
+            monobit.charmaps.register(f'cp{cp_name}', f'{os.getcwd()}/{CODEPAGE_DIR}/{filename}')
 
     try:
         os.mkdir('work')
@@ -264,7 +267,7 @@ def main():
 
     # create empty fonts with header
     final_font = {
-        size: monobit.font.Font(comments=comments).set_encoding('unicode')
+        size: monobit.Font(comments=comments).set_encoding('unicode')
         for size in SIZES
     }
 
@@ -402,7 +405,7 @@ def main():
         univga = univga.with_glyph(univga_orig.get_glyph(orig).set_annotations(char=repl))
 
     # drop labels to avoid retaing chars on merge
-    univga = monobit.Font(_g.set_annotations(labels=()) for _g in univga.glyphs)
+    univga = monobit.Font(_g.modify(labels=()) for _g in univga.glyphs)
 
     logging.info('Add uni-vga box-drawing glyphs.')
     box_glyphs = univga.subset(chr(_code) for _code in UNIVGA_UNSHIFTED)
