@@ -15,7 +15,7 @@ from collections import defaultdict
 from itertools import chain
 from urllib import request
 
-from tools import monobit
+import monobit
 
 logging.basicConfig(level=logging.INFO)
 
