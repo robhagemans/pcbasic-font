@@ -305,7 +305,12 @@ def main():
                 f'work/yaff/{cpi_name}_{codepage}_{font.pixel_size:02d}.yaff',
                 overwrite=True,
             )
-            freedos_fonts[font.pixel_size][(cpi_name, codepage)] = font.modify(encoding='unicode')
+            font = font.modify(glyphs=(
+                _g.modify(comment=f'{cpi_name} {codepage}')
+                for _g in font.glyphs)
+            )
+            freedos_fonts[font.pixel_size][(cpi_name, codepage)] = font
+
 
     # retrieve preferred picks from choices file
     logging.info('Processing choices')
@@ -330,7 +335,7 @@ def main():
 
     # create empty fonts with header
     final_font = {
-        size: monobit.Font(comment=comments).modify(encoding='unicode')
+        size: monobit.Font(comment=comments, encoding='unicode')
         for size in SIZES
     }
 
@@ -340,6 +345,7 @@ def main():
             logging.info(f'Merging {yaff}.')
             yaffont, *_ = monobit.load(yaff)
             yaffont = yaffont.exclude(chars=final_font[size].get_chars())
+            yaffont = yaffont.modify(glyphs=(_g.modify(comment=yaff) for _g in yaffont.glyphs))
             final_font[size] = final_font[size].append(glyphs=yaffont.glyphs)
 
     # merge preferred picks from FreeDOS fonts
@@ -414,6 +420,7 @@ def main():
 
     # read univga
     univga_orig, *_ = monobit.load(f'work/{UNIVGA_BDF}')
+    univga_orig = univga_orig.modify(glyphs=(_g.modify(comment=UNIVGA_BDF) for _g in univga_orig.glyphs))
     # replace code points where necessary
     univga = univga_orig.exclude(chars=UNIVGA_REPLACE.keys())
     for orig, repl in UNIVGA_REPLACE.items():
@@ -444,14 +451,15 @@ def main():
 
     # read unifont
     logging.info('Add glyphs from unifont.')
-    unifont = monobit.Font().modify(encoding='unicode')
+    unifont = monobit.Font(encoding='unicode')
+
     for name in UNIFONT_NAMES:
         part, *_ = monobit.load(f'work/{UNIFONT_DIR}/{name}')
+        part = part.modify(glyphs=(_g.modify(comment=name) for _g in part.glyphs))
         unifont = unifont.append(glyphs=part.glyphs)
     unifont = unifont.subset(chr(_code) for _code in UNIFONT_RANGES)
     unifont = unifont.exclude(chars=final_font[16].get_chars())
     final_font[16] = final_font[16].append(glyphs=unifont.glyphs)
-
 
     # exclude personal use area code points
     logging.info('Removing private use area')
