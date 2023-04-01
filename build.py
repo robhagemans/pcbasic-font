@@ -306,7 +306,7 @@ def main():
                 overwrite=True,
             )
             font = font.modify(glyphs=(
-                _g.modify(comment=f'{cpi_name} {codepage}')
+                _g.modify(codepoint=None, comment=f'{cpi_name} {codepage}')
                 for _g in font.glyphs)
             )
             freedos_fonts[font.pixel_size][(cpi_name, codepage)] = font
