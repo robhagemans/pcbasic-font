@@ -421,8 +421,8 @@ def main():
             glyphs=(univga_orig.get_glyph(orig).modify(char=repl),)
         )
 
-    # drop labels to avoid retaing chars on merge
-    univga = monobit.Font(_g.modify(tags=()) for _g in univga.glyphs)
+    # remove shift-up to avoid resizing font on merge
+    univga = monobit.Font(_g.modify(shift_up=None) for _g in univga.glyphs)
 
     logging.info('Add uni-vga box-drawing glyphs.')
     box = univga.subset(chr(_code) for _code in UNIVGA_UNSHIFTED)
@@ -431,10 +431,9 @@ def main():
     # shift uni-vga baseline down by one
     logging.info('Add remaining uni-vga glyphs after rebaselining.')
     univga_rebaselined = univga.exclude(chars=(chr(_code) for _code in UNIVGA_NONPRINTING))
-    univga_rebaselined = univga_rebaselined.expand(top=1).crop(bottom=1)
+    univga_rebaselined = univga_rebaselined.expand(top=1, adjust_metrics=False).crop(bottom=1, adjust_metrics=False)
     univga_rebaselined = univga_rebaselined.exclude(chars=final_font[16].get_chars())
     final_font[16] = final_font[16].append(glyphs=univga_rebaselined.glyphs)
-
 
     # copy glyphs from uni-vga
     for copy, orig in UNIVGA_COPY.items():
