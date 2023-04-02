@@ -42,7 +42,7 @@ CPI_NAMES = ['EGA.CPX'] + [f'EGA{_i}.CPX' for _i in range(2, 19)]
 CODEPAGE_DIR = 'codepage/'
 TARGET_DIR = 'output/'
 
-HEADER = 'header.txt'
+HEADER = 'README.txt'
 CHOICES = 'choices'
 
 SIZES = (8, 14, 16)
@@ -331,7 +331,7 @@ def main():
     # read header
     logging.info('Processing header')
     with open(HEADER, 'r') as header:
-        comments = '\n'.join(_line[2:].rstrip() for _line in header)
+        comments = '\n'.join(header)
 
     # create empty fonts with header
     final_font = {
