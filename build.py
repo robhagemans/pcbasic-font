@@ -260,11 +260,14 @@ def main():
     # process CPIDOS package
 
     # unpack zipfile
-    pack = zipfile.ZipFile(ORIG_DIR + CPIDOS_ZIP, 'r')
+    pack = zipfile.ZipFile(f'{ORIG_DIR}{CPIDOS_ZIP}', 'r')
     # extract cpi files from compressed cpx files
+    os.chdir(WORK_DIR)
     for name in CPI_NAMES:
-        pack.extract(CPI_DIR + name)
-        subprocess.call(['upx', '-d', CPI_DIR + name])
+        cpi_name = f'{CPI_DIR}{name}'
+        pack.extract(cpi_name)
+        subprocess.call(['upx', '-d', cpi_name])
+    os.chdir('..')
 
     # register custom FreeDOS codepages
     for filename in os.listdir(CODEPAGE_DIR):
@@ -274,9 +277,10 @@ def main():
 
     # load CPIs and add to dictionary
     freedos_fonts = {_size: {} for _size in SIZES}
-    for cpi_name in CPI_NAMES:
+    for name in CPI_NAMES:
+        cpi_name = f'{WORK_DIR}{CPI_DIR}{name}'
         logging.info(f'Reading {cpi_name}')
-        cpi = monobit.load(f'work/{CPI_DIR}{cpi_name}', format='cpi')
+        cpi = monobit.load(cpi_name, format='cpi')
         for font in cpi:
             codepage = font.encoding # always starts with `cp`
             height = font.bounding_box[1]
