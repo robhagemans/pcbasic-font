@@ -32,17 +32,19 @@ UNIFONT_ZIP = UNIFONT_URL.split('/')[-1]
 
 UNIVGA_BDF = 'uni_vga/u_vga16.bdf'
 
-UNIFONT_DIR = UNIFONT_ZIP.split('.tar.gz')[0] + '/font/plane00/'
+UNIFONT_DIR = '/font/plane00/'
 UNIFONT_NAMES = ('spaces.hex', 'unifont-base.hex', 'hangul-syllables.hex', 'wqy.hex')
 
 CPI_DIR = 'CPI/'
 CPI_NAMES = ['EGA.CPX'] + [f'EGA{_i}.CPX' for _i in range(2, 19)]
 
 
+WORK_DIR = 'work/'
+ORIG_DIR = 'originals/'
 CODEPAGE_DIR = 'codepage/'
 TARGET_DIR = 'output/'
 
-HEADER = 'header.txt'
+HEADER = 'README.txt'
 CHOICES = 'choices'
 
 SIZES = (8, 14, 16)
@@ -221,10 +223,10 @@ def fullname(char):
     return ', '.join(f'U+{ord(_c):04X} {name(_c)}' for _c in char)
 
 
-def precompose(font, max_glyphs):
-    """Create composed glyphs from combining up to `max_glyphs` glyphs."""
+def assign_equivalents(font):
+    """Assign canonically equivalent characters."""
     composed_glyphs = {}
-    codepoints = set(_glyph.char for _glyph in font.glyphs if _glyph.char)
+    codepoints = set(font.get_chars())
     # run through all of plane 0
     for cp in range(0x10000):
         char = chr(cp)
@@ -236,17 +238,36 @@ def precompose(font, max_glyphs):
                 font = font.append(
                     glyphs=(font.get_glyph(equiv).modify(char=char),)
                 )
-            else:
-                decomp = normalize('NFD', char)
-                if len(decomp) <= max_glyphs and all(c in codepoints for c in decomp):
-                    logging.info(f'Composing {fullname(char)} as {fullname(decomp)}.')
-                    glyphs = (font.get_glyph(c) for c in decomp)
-                    composed = monobit.Glyph.superimpose(glyphs).modify(char=char)
-                    font = font.append(glyphs=(composed,))
     return font
+
+def retrieve_originals():
+    """Download original sources."""
+    os.makedirs(ORIG_DIR, exist_ok=True)
+    logging.info('Downloading originals.')
+    for source in (CPIDOS_URL, UNIVGA_URL, UNIFONT_URL):
+        target = ORIG_DIR + source.split('/')[-1]
+        if not os.path.isfile(target):
+            logging.info(f'Downloading {source}.')
+            request.urlretrieve(source, target)
 
 
 def main():
+    # create work directories
+    os.makedirs(WORK_DIR, exist_ok=True)
+    # download original sources
+    retrieve_originals()
+
+    # process CPIDOS package
+
+    # unpack zipfile
+    pack = zipfile.ZipFile(f'{ORIG_DIR}{CPIDOS_ZIP}', 'r')
+    # extract cpi files from compressed cpx files
+    os.chdir(WORK_DIR)
+    for name in CPI_NAMES:
+        cpi_name = f'{CPI_DIR}{name}'
+        pack.extract(cpi_name)
+        subprocess.call(['upx', '-d', cpi_name])
+    os.chdir('..')
 
     # register custom FreeDOS codepages
     for filename in os.listdir(CODEPAGE_DIR):
@@ -254,61 +275,18 @@ def main():
         if ext == '.ucp':
             monobit.charmaps.register(f'cp{cp_name}', f'{os.getcwd()}/{CODEPAGE_DIR}/{filename}')
 
-    try:
-        os.mkdir('work')
-    except OSError:
-        pass
-    try:
-        os.mkdir('work/yaff')
-    except OSError:
-        pass
-
-    # obtain original source files
-    os.chdir('work')
-    logging.info('Downloading originals.')
-    for source in (CPIDOS_URL, UNIVGA_URL, UNIFONT_URL):
-        target = source.split('/')[-1]
-        if not os.path.isfile(target):
-            logging.info(f'Downloading {source}.')
-            request.urlretrieve(source, target)
-
-    # process unifont package
-    with tarfile.open(UNIFONT_ZIP, 'r:gz') as unizip:
-        for name in UNIFONT_NAMES:
-            unizip.extract(UNIFONT_DIR + name)
-
-    # process univga package
-    with tarfile.open(UNIVGA_ZIP, 'r:gz') as univga:
-        univga.extract(UNIVGA_BDF)
-
-    # process CPIDOS package
-
-    # unpack zipfile
-    pack = zipfile.ZipFile(CPIDOS_ZIP, 'r')
-    # extract cpi files from compressed cpx files
-    for name in CPI_NAMES:
-        pack.extract(CPI_DIR + name)
-        subprocess.call(['upx', '-d', CPI_DIR + name])
-    os.chdir('..')
-
     # load CPIs and add to dictionary
     freedos_fonts = {_size: {} for _size in SIZES}
-    for cpi_name in CPI_NAMES:
+    for name in CPI_NAMES:
+        cpi_name = f'{WORK_DIR}{CPI_DIR}{name}'
         logging.info(f'Reading {cpi_name}')
-        cpi = monobit.load(f'work/{CPI_DIR}{cpi_name}', format='cpi')
+        cpi = monobit.load(cpi_name, format='cpi')
         for font in cpi:
             codepage = font.encoding # always starts with `cp`
-            height = font.bounding_box[1]
-            # save intermediate file
-            monobit.save(
-                font.label(comment_from='desc'),
-                f'work/yaff/{cpi_name}_{codepage}_{font.pixel_size:02d}.yaff',
-                overwrite=True,
-            )
             font = font.modify(glyphs=(
                 _g.modify(codepoint=None, comment=f'{cpi_name} {codepage}')
-                for _g in font.glyphs)
-            )
+                for _g in font.glyphs
+            ))
             freedos_fonts[font.pixel_size][(cpi_name, codepage)] = font
 
 
@@ -331,7 +309,7 @@ def main():
     # read header
     logging.info('Processing header')
     with open(HEADER, 'r') as header:
-        comments = '\n'.join(_line[2:].rstrip() for _line in header)
+        comments = header.read()
 
     # create empty fonts with header
     final_font = {
@@ -370,7 +348,7 @@ def main():
     # assign length-1 equivalents
     logging.info('Assign canonical equivalents.')
     for size in final_font.keys():
-        final_font[size] = precompose(final_font[size], max_glyphs=1)
+        final_font[size] = assign_equivalents(final_font[size])
 
     # drop glyphs with better alternatives in uni-vga
     final_font[16] = final_font[16].exclude(chars=FREEDOS_DROP)
@@ -419,7 +397,7 @@ def main():
                 )
 
     # read univga
-    univga_orig, *_ = monobit.load(f'work/{UNIVGA_BDF}')
+    univga_orig, *_ = monobit.load(f'{ORIG_DIR}{UNIVGA_ZIP}/{UNIVGA_BDF}')
     univga_orig = univga_orig.modify(glyphs=(_g.modify(comment=UNIVGA_BDF) for _g in univga_orig.glyphs))
     # replace code points where necessary
     univga = univga_orig.exclude(chars=UNIVGA_REPLACE.keys())
@@ -454,19 +432,16 @@ def main():
     unifont = monobit.Font(encoding='unicode')
 
     for name in UNIFONT_NAMES:
-        part, *_ = monobit.load(f'work/{UNIFONT_DIR}/{name}')
+        part, *_ = monobit.load(f'{ORIG_DIR}{UNIFONT_ZIP}/{UNIFONT_DIR}{name}')
         part = part.modify(glyphs=(_g.modify(comment=name) for _g in part.glyphs))
         unifont = unifont.append(glyphs=part.glyphs)
     unifont = unifont.subset(chr(_code) for _code in UNIFONT_RANGES)
     unifont = unifont.exclude(chars=final_font[16].get_chars())
     final_font[16] = final_font[16].append(glyphs=unifont.glyphs)
 
-    # exclude personal use area code points
+    # exclude private use area code points
     logging.info('Removing private use area')
     pua_keys = set(chr(_code) for _code in range(0xe000, 0xf900))
-    pua_font = {_size: _font.subset(pua_keys) for _size, _font in final_font.items()}
-    for size, font in pua_font.items():
-        monobit.save(font, f'work/pua_{size:02d}.hex', format='pcbasic', overwrite=True)
     final_font = {_size: _font.exclude(chars=pua_keys) for _size, _font in final_font.items()}
 
     logging.info('Sorting glyphs')
@@ -475,7 +450,6 @@ def main():
         # note this'll be the Freedos 437 as we overrode it
         keys437 = list(monobit.charmaps['cp437'].mapping.values())
         font437 = final_font[size].subset(keys437)
-        monobit.save(font437, f'work/cp437_{size}.yaff', overwrite=True)
         sortedfont = monobit.font.Font(sorted(
             (_glyph for _glyph in final_font[size].exclude(keys437).glyphs),
             key=lambda _g: (_g.char or '')
@@ -493,15 +467,6 @@ def main():
         # drop glyph comments
         font = font.modify(glyphs=(_g.modify(comment=None) for _g in font.glyphs))
         monobit.save(font, f'{TARGET_DIR}/default_{size:02d}.hex', format='pcbasic', overwrite=True)
-
-    #composed = {
-    #    size: precompose(font, max_glyphs=4)
-    #            .exclude(font.get_chars()).drop_comments().add_glyph_names()
-    #    for size, font in final_font.items()
-    #}
-
-    #for size, font in composed.items():
-    #    monobit.save(font, f'autocomposed_{size:02d}.yaff')
 
     for size, font in final_font.items():
         wrong_size = [f'{ord(g.char):04x}' for g in font.glyphs if g.height != size or g.width not in (8, 16)]
