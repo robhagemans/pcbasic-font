@@ -32,13 +32,15 @@ UNIFONT_ZIP = UNIFONT_URL.split('/')[-1]
 
 UNIVGA_BDF = 'uni_vga/u_vga16.bdf'
 
-UNIFONT_DIR = UNIFONT_ZIP.split('.tar.gz')[0] + '/font/plane00/'
+UNIFONT_DIR = '/font/plane00/'
 UNIFONT_NAMES = ('spaces.hex', 'unifont-base.hex', 'hangul-syllables.hex', 'wqy.hex')
 
 CPI_DIR = 'CPI/'
 CPI_NAMES = ['EGA.CPX'] + [f'EGA{_i}.CPX' for _i in range(2, 19)]
 
 
+WORK_DIR = 'work/'
+ORIG_DIR = 'originals/'
 CODEPAGE_DIR = 'codepage/'
 TARGET_DIR = 'output/'
 
@@ -245,51 +247,37 @@ def precompose(font, max_glyphs):
                     font = font.append(glyphs=(composed,))
     return font
 
+def retrieve_originals():
+    """Download original sources."""
+    os.makedirs(ORIG_DIR, exist_ok=True)
+    logging.info('Downloading originals.')
+    for source in (CPIDOS_URL, UNIVGA_URL, UNIFONT_URL):
+        target = ORIG_DIR + source.split('/')[-1]
+        if not os.path.isfile(target):
+            logging.info(f'Downloading {source}.')
+            request.urlretrieve(source, target)
+
 
 def main():
+    # create work directories
+    os.makedirs(WORK_DIR + 'yaff', exist_ok=True)
+    # download original sources
+    retrieve_originals()
+
+    # process CPIDOS package
+
+    # unpack zipfile
+    pack = zipfile.ZipFile(ORIG_DIR + CPIDOS_ZIP, 'r')
+    # extract cpi files from compressed cpx files
+    for name in CPI_NAMES:
+        pack.extract(CPI_DIR + name)
+        subprocess.call(['upx', '-d', CPI_DIR + name])
 
     # register custom FreeDOS codepages
     for filename in os.listdir(CODEPAGE_DIR):
         cp_name, ext = os.path.splitext(os.path.basename(filename))
         if ext == '.ucp':
             monobit.charmaps.register(f'cp{cp_name}', f'{os.getcwd()}/{CODEPAGE_DIR}/{filename}')
-
-    try:
-        os.mkdir('work')
-    except OSError:
-        pass
-    try:
-        os.mkdir('work/yaff')
-    except OSError:
-        pass
-
-    # obtain original source files
-    os.chdir('work')
-    logging.info('Downloading originals.')
-    for source in (CPIDOS_URL, UNIVGA_URL, UNIFONT_URL):
-        target = source.split('/')[-1]
-        if not os.path.isfile(target):
-            logging.info(f'Downloading {source}.')
-            request.urlretrieve(source, target)
-
-    # process unifont package
-    with tarfile.open(UNIFONT_ZIP, 'r:gz') as unizip:
-        for name in UNIFONT_NAMES:
-            unizip.extract(UNIFONT_DIR + name)
-
-    # process univga package
-    with tarfile.open(UNIVGA_ZIP, 'r:gz') as univga:
-        univga.extract(UNIVGA_BDF)
-
-    # process CPIDOS package
-
-    # unpack zipfile
-    pack = zipfile.ZipFile(CPIDOS_ZIP, 'r')
-    # extract cpi files from compressed cpx files
-    for name in CPI_NAMES:
-        pack.extract(CPI_DIR + name)
-        subprocess.call(['upx', '-d', CPI_DIR + name])
-    os.chdir('..')
 
     # load CPIs and add to dictionary
     freedos_fonts = {_size: {} for _size in SIZES}
@@ -331,7 +319,7 @@ def main():
     # read header
     logging.info('Processing header')
     with open(HEADER, 'r') as header:
-        comments = '\n'.join(header)
+        comments = header.read()
 
     # create empty fonts with header
     final_font = {
@@ -419,7 +407,7 @@ def main():
                 )
 
     # read univga
-    univga_orig, *_ = monobit.load(f'work/{UNIVGA_BDF}')
+    univga_orig, *_ = monobit.load(f'{ORIG_DIR}{UNIVGA_ZIP}/{UNIVGA_BDF}')
     univga_orig = univga_orig.modify(glyphs=(_g.modify(comment=UNIVGA_BDF) for _g in univga_orig.glyphs))
     # replace code points where necessary
     univga = univga_orig.exclude(chars=UNIVGA_REPLACE.keys())
@@ -454,7 +442,7 @@ def main():
     unifont = monobit.Font(encoding='unicode')
 
     for name in UNIFONT_NAMES:
-        part, *_ = monobit.load(f'work/{UNIFONT_DIR}/{name}')
+        part, *_ = monobit.load(f'{ORIG_DIR}{UNIFONT_ZIP}/{UNIFONT_DIR}{name}')
         part = part.modify(glyphs=(_g.modify(comment=name) for _g in part.glyphs))
         unifont = unifont.append(glyphs=part.glyphs)
     unifont = unifont.subset(chr(_code) for _code in UNIFONT_RANGES)
