@@ -223,10 +223,10 @@ def fullname(char):
     return ', '.join(f'U+{ord(_c):04X} {name(_c)}' for _c in char)
 
 
-def precompose(font, max_glyphs):
-    """Create composed glyphs from combining up to `max_glyphs` glyphs."""
+def assign_equivalents(font):
+    """Assign canonically equivalent characters."""
     composed_glyphs = {}
-    codepoints = set(_glyph.char for _glyph in font.glyphs if _glyph.char)
+    codepoints = set(font.get_chars())
     # run through all of plane 0
     for cp in range(0x10000):
         char = chr(cp)
@@ -238,13 +238,6 @@ def precompose(font, max_glyphs):
                 font = font.append(
                     glyphs=(font.get_glyph(equiv).modify(char=char),)
                 )
-            else:
-                decomp = normalize('NFD', char)
-                if len(decomp) <= max_glyphs and all(c in codepoints for c in decomp):
-                    logging.info(f'Composing {fullname(char)} as {fullname(decomp)}.')
-                    glyphs = (font.get_glyph(c) for c in decomp)
-                    composed = monobit.Glyph.superimpose(glyphs).modify(char=char)
-                    font = font.append(glyphs=(composed,))
     return font
 
 def retrieve_originals():
@@ -358,7 +351,7 @@ def main():
     # assign length-1 equivalents
     logging.info('Assign canonical equivalents.')
     for size in final_font.keys():
-        final_font[size] = precompose(final_font[size], max_glyphs=1)
+        final_font[size] = assign_equivalents(final_font[size])
 
     # drop glyphs with better alternatives in uni-vga
     final_font[16] = final_font[16].exclude(chars=FREEDOS_DROP)
@@ -481,15 +474,6 @@ def main():
         # drop glyph comments
         font = font.modify(glyphs=(_g.modify(comment=None) for _g in font.glyphs))
         monobit.save(font, f'{TARGET_DIR}/default_{size:02d}.hex', format='pcbasic', overwrite=True)
-
-    #composed = {
-    #    size: precompose(font, max_glyphs=4)
-    #            .exclude(font.get_chars()).drop_comments().add_glyph_names()
-    #    for size, font in final_font.items()
-    #}
-
-    #for size, font in composed.items():
-    #    monobit.save(font, f'autocomposed_{size:02d}.yaff')
 
     for size, font in final_font.items():
         wrong_size = [f'{ord(g.char):04x}' for g in font.glyphs if g.height != size or g.width not in (8, 16)]
