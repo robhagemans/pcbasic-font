@@ -253,7 +253,7 @@ def retrieve_originals():
 
 def main():
     # create work directories
-    os.makedirs(WORK_DIR + 'yaff', exist_ok=True)
+    os.makedirs(WORK_DIR, exist_ok=True)
     # download original sources
     retrieve_originals()
 
@@ -283,17 +283,10 @@ def main():
         cpi = monobit.load(cpi_name, format='cpi')
         for font in cpi:
             codepage = font.encoding # always starts with `cp`
-            height = font.bounding_box[1]
-            # save intermediate file
-            monobit.save(
-                font.label(comment_from='desc'),
-                f'work/yaff/{cpi_name}_{codepage}_{font.pixel_size:02d}.yaff',
-                overwrite=True,
-            )
             font = font.modify(glyphs=(
                 _g.modify(codepoint=None, comment=f'{cpi_name} {codepage}')
-                for _g in font.glyphs)
-            )
+                for _g in font.glyphs
+            ))
             freedos_fonts[font.pixel_size][(cpi_name, codepage)] = font
 
 
@@ -446,12 +439,9 @@ def main():
     unifont = unifont.exclude(chars=final_font[16].get_chars())
     final_font[16] = final_font[16].append(glyphs=unifont.glyphs)
 
-    # exclude personal use area code points
+    # exclude private use area code points
     logging.info('Removing private use area')
     pua_keys = set(chr(_code) for _code in range(0xe000, 0xf900))
-    pua_font = {_size: _font.subset(pua_keys) for _size, _font in final_font.items()}
-    for size, font in pua_font.items():
-        monobit.save(font, f'work/pua_{size:02d}.hex', format='pcbasic', overwrite=True)
     final_font = {_size: _font.exclude(chars=pua_keys) for _size, _font in final_font.items()}
 
     logging.info('Sorting glyphs')
@@ -460,7 +450,6 @@ def main():
         # note this'll be the Freedos 437 as we overrode it
         keys437 = list(monobit.charmaps['cp437'].mapping.values())
         font437 = final_font[size].subset(keys437)
-        monobit.save(font437, f'work/cp437_{size}.yaff', overwrite=True)
         sortedfont = monobit.font.Font(sorted(
             (_glyph for _glyph in final_font[size].exclude(keys437).glyphs),
             key=lambda _g: (_g.char or '')
